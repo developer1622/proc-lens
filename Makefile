@@ -2,28 +2,47 @@
 # proc-lens Makefile (Google Engineering Style)
 # ==========================================
 
+# Detect current platform (used by default for `make build`)
+GOOS ?= $(shell go env GOOS)
+GOARCH ?= $(shell go env GOARCH)
+
 BINARY_NAME=proc-lens
 CMD_PATH=./cmd/proc-lens
 VERSION=v1.0.0
 
-LDFLAGS_STATIC=-ldflags "-s -w -extldflags -static -X github.com/developer1622/proc-lens/pkg/cmd.Version=$(VERSION)"
-LDFLAGS_DYN=-ldflags "-s -w -X github.com/developer1622/proc-lens/pkg/cmd.Version=$(VERSION)"
+# Use full static flags for portable binaries (recommended for releases and local use)
+LDFLAGS=-ldflags "-s -w -extldflags -static -X github.com/developer1622/proc-lens/pkg/cmd.Version=$(VERSION)"
 
-.PHONY: all build test clean docker-build helm-lint helm-install help
+# Determine output name (add .exe on Windows)
+ifeq ($(GOOS),windows)
+	BINARY_OUT=$(BINARY_NAME).exe
+else
+	BINARY_OUT=$(BINARY_NAME)
+endif
+
+.PHONY: all build build-all test clean docker-build helm-lint helm-install help
 
 default: help
 
 all: test build docker-build
 
+# Build for the current platform (or override with GOOS/GOARCH)
+# Examples:
+#   make build                     # native build (linux/amd64 on most Linux machines)
+#   make build GOOS=windows GOARCH=amd64
+#   make build GOOS=linux GOARCH=arm64
 build:
-	@echo "==> Compiling local Windows binary..."
-	go build $(LDFLAGS_DYN) -o $(BINARY_NAME).exe $(CMD_PATH)
-	@echo "==> Compiling fully static Linux binary (CGO disabled)..."
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS_STATIC) -o $(BINARY_NAME) $(CMD_PATH)
-	@echo "==> Compiling macOS Intel binary..."
-	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS_DYN) -o $(BINARY_NAME)-mac-intel $(CMD_PATH)
-	@echo "==> Compiling macOS Apple Silicon binary..."
-	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS_DYN) -o $(BINARY_NAME)-mac-silicon $(CMD_PATH)
+	@echo "==> Building for $(GOOS)/$(GOARCH)..."
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(BINARY_OUT) $(CMD_PATH)
+	@echo "Build complete: $(BINARY_OUT)"
+
+# Build all supported platforms (previous default behavior)
+build-all:
+	@echo "==> Building all platforms..."
+	$(MAKE) build GOOS=windows GOARCH=amd64 BINARY_OUT=proc-lens.exe
+	$(MAKE) build GOOS=linux GOARCH=amd64
+	$(MAKE) build GOOS=darwin GOARCH=amd64 BINARY_OUT=proc-lens-mac-intel
+	$(MAKE) build GOOS=darwin GOARCH=arm64 BINARY_OUT=proc-lens-mac-silicon
 	@echo "Build complete."
 
 test:
@@ -32,7 +51,7 @@ test:
 
 clean:
 	@echo "==> Cleaning build artifacts..."
-	rm -f $(BINARY_NAME) $(BINARY_NAME).exe $(BINARY_NAME)-mac-intel $(BINARY_NAME)-mac-silicon
+	rm -f proc-lens proc-lens.exe proc-lens-mac-intel proc-lens-mac-silicon
 	@echo "Clean complete."
 
 docker-build:
@@ -51,7 +70,8 @@ help:
 	@echo "proc-lens CLI developer automation utility."
 	@echo ""
 	@echo "Targets:"
-	@echo "  build          Compile Windows, Linux static, and macOS binaries"
+	@echo "  build          Build for current platform (override with GOOS/GOARCH)"
+	@echo "  build-all      Build for Windows + Linux + macOS (all common arches)"
 	@echo "  test           Run all Go package unit tests"
 	@echo "  clean          Remove compiled binaries"
 	@echo "  docker-build   Build minimal distroless Docker container"

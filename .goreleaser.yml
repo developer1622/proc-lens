@@ -41,10 +41,10 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
       {{- if .Mips }}_{{ .Mips }}{{ end }}
-    format: tar.gz
+    formats: [tar.gz]
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     files:
       - README.md
       - LICENSE
@@ -60,9 +60,11 @@ sboms:
     documents:
       - "{{ .ArtifactName }}.sbom.json"
 
-# Docker images - goreleaser builds the correct arch binary first, then we use
-# a cross-compile friendly Dockerfile (updated with build args) + buildx.
-# This enables true multi-arch images.
+# Docker images (using the current supported dockers + docker_manifests syntax).
+# Note: These are deprecated in favor of dockers_v2 / docker_manifests_v2.
+# We are keeping the working syntax for now until the new v2 docker schema stabilizes across our target GoReleaser versions.
+# goreleaser builds the correct arch binary first, then we use
+# a cross-compile friendly Dockerfile + buildx.
 dockers:
   - id: linux-amd64
     goos: linux
