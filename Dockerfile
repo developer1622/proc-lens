@@ -40,8 +40,10 @@ COPY --from=builder /build/proc-lens /proc-lens
 USER 65534:65534
 
 # Declare container metadata
+# These labels help link the package to the repository in GHCR (per GitHub Container registry docs)
 LABEL org.opencontainers.image.title="proc-lens" \
       org.opencontainers.image.description="Universal Process Intelligence observability agent" \
+      org.opencontainers.image.source="https://github.com/developer1622/proc-lens" \
       org.opencontainers.image.authors="observability-engineers"
 
 # Run the scanner in daemon loop mode by default, logging predictions to stdout
