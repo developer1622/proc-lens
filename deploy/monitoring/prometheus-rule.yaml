@@ -1,0 +1,27 @@
+﻿apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: proc-lens-alerts
+  labels:
+    role: alert-rules
+spec:
+  groups:
+    - name: proc-lens.rules
+      rules:
+        - alert: ProcLensHighCollectionDuration
+          expr: proc_lens_collection_duration_seconds > 5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ProcLens high collection duration"
+            description: "ProcLens collection cycle on node {{ $labels.node }} took {{ $value }}s, which exceeds 5s."
+
+        - alert: ProcLensLowDataCompleteness
+          expr: proc_lens_data_completeness_score < 0.8
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ProcLens low data completeness score"
+            description: "ProcLens agent completeness score on node {{ $labels.node }} is {{ $value }}, indicating missing data sources."

@@ -1,0 +1,87 @@
+# Default values for proc-lens DaemonSet deployment.
+
+image:
+  repository: proc-lens
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Since this agent is read-only and queries local host/container namespaces without 
+# interacting with the Kubernetes API, it does not require a ServiceAccount token. 
+# Create is set to false by default for minimal security footprint and surface area.
+serviceAccount:
+  create: false
+  annotations: {}
+  name: ""
+
+# Disable hostNetwork by default. Raw FD telemetry does not require host network namespace visibility.
+hostNetwork: false
+
+# Pod-level security context. Configured to run as unprivileged user 'nobody' (65534).
+podSecurityContext:
+  runAsUser: 65534
+  runAsGroup: 65534
+  fsGroup: 65534
+
+# Container-level security context.
+# Runs with privileged mode disabled and drops all capabilities except CAP_SYS_PTRACE
+# which is needed on modern Linux kernels to read /proc/<pid> state of other processes.
+securityContext:
+  privileged: false
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  capabilities:
+    add:
+      - SYS_PTRACE       # Required to read /proc/<pid> files of host processes
+    drop:
+      - ALL
+
+# Process Intelligence scanning configuration options
+scan:
+  interval: "10s"        # Time interval between loop scans
+  duration: "1s"         # Profiling window duration for CPU/IO rate calculations
+  minCpu: 0.1            # Minimum CPU% display threshold
+  minMemMb: 5.0          # Minimum memory RSS display threshold (MB)
+  format: "json"         # Output format: json (recommended for container logging) or text
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+nodeSelector: {}
+
+tolerations:
+  # Allow running on master/control-plane nodes by default
+  - operator: Exists
+    effect: NoSchedule
+
+affinity: {}
+
+# NetworkPolicy configuration to secure access to the Prometheus metrics endpoint (port 8091).
+# The metrics endpoint is protected by an optional bearer token. It is recommended
+# to enable this NetworkPolicy to restrict ingress to authorized scrapers only (e.g. Prometheus).
+networkPolicy:
+  enabled: true
+  ingress:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+
+# Priority class name for the DaemonSet pods. Recommended for node agents to prevent eviction.
+priorityClassName: "system-node-critical"
+
+# Update strategy for the DaemonSet.
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
+# PodDisruptionBudget configuration.
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+

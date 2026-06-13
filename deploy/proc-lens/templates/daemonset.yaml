@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "proc-lens.fullname" . }}
+  labels:
+    {{- include "proc-lens.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "proc-lens.selectorLabels" . | nindent 6 }}
+  {{- if .Values.updateStrategy }}
+  updateStrategy:
+    {{- toYaml .Values.updateStrategy | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "proc-lens.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "proc-lens.serviceAccountName" . }}
+      
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName | quote }}
+      {{- end }}
+      
+      # Pod-level security context configures user mapping
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      
+      # hostPID is required to allow the container to read the process namespace of the host node
+      hostPID: true
+      
+      # hostNetwork is disabled by default for security as raw fd telemetry bypasses network space boundaries
+      hostNetwork: {{ .Values.hostNetwork | default false }}
+
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          
+          # Command overrides calling proc-lens scan with looping and threshold arguments
+          command: ["/proc-lens"]
+          args:
+            - "scan"
+            - "--loop"
+            - "--interval"
+            - {{ .Values.scan.interval | quote }}
+            - "--duration"
+            - {{ .Values.scan.duration | quote }}
+            - "--min-cpu"
+            - {{ .Values.scan.minCpu | quote }}
+            - "--min-mem"
+            - {{ .Values.scan.minMemMb | quote }}
+            - "--format"
+            - {{ .Values.scan.format | quote }}
+            - "--http-addr"
+            - ":8091"
+          
+          env:
+            - name: HOST_PROC
+              value: /host/proc
+            - name: HOST_SYS
+              value: /host/sys
+            - name: HOST_VAR
+              value: /host/var
+          
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          
+          ports:
+            - name: http-telemetry
+              containerPort: 8091
+              protocol: TCP
+
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http-telemetry
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http-telemetry
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          
+          volumeMounts:
+            # Mount host /proc to allow the container direct read-access to host process metadata
+            - name: host-proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: host-sys
+              mountPath: /host/sys
+              readOnly: true
+            # Mount host /var/log to resolve container ID to pod metadata
+            - name: host-var-log
+              mountPath: /host/var/log
+              readOnly: true
+
+      volumes:
+        - name: host-proc
+          hostPath:
+            path: /proc
+        - name: host-sys
+          hostPath:
+            path: /sys
+        - name: host-var-log
+          hostPath:
+            path: /var/log
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+

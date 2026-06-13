@@ -1,0 +1,89 @@
+# Continuous Integration pipeline
+# Runs on every push and pull request.
+# Validates the project builds and tests correctly before releases.
+# Uses GoReleaser's check to validate the release configuration.
+
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test & Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.24']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Go
+        uses: actions/setup-go@f111f3307d8850f5010000e31836c8413dbca978 # v5.3.0
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test ./... -race -coverprofile=coverage.out -covermode=atomic
+
+      - name: Upload coverage (optional)
+        if: matrix.go-version == '1.24'
+        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e68ceed900238 # v4.6.0
+        with:
+          files: ./coverage.out
+          fail_ci_if_error: false
+
+      - name: Verify build for all targets (smoke)
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o /dev/null ./cmd/proc-lens
+          GOOS=linux GOARCH=arm64 go build -o /dev/null ./cmd/proc-lens
+          GOOS=darwin GOARCH=amd64 go build -o /dev/null ./cmd/proc-lens
+          GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/proc-lens
+          GOOS=windows GOARCH=amd64 go build -o /dev/null ./cmd/proc-lens
+
+      - name: Run GoReleaser check (validate pipeline config)
+        uses: goreleaser/goreleaser-action@90a319d084ebc77d941d3e813f6681d4b68e0d4c # v6.1.0
+        with:
+          version: latest
+          args: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Go
+        uses: actions/setup-go@f111f3307d8850f5010000e31836c8413dbca978 # v5.3.0
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: golangci-lint (optional - falls back gracefully if no config)
+        uses: golangci/golangci-lint-action@971e284b6050e8a5549007f30d30ec0c8c227f67 # v6.1.1
+        with:
+          version: latest
+          args: --timeout=5m
+        continue-on-error: true  # Non-blocking until .golangci.yml is added
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Go mod tidy check
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum || (echo "go.mod/go.sum not tidy" && exit 1)

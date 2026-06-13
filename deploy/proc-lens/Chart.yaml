@@ -1,0 +1,7 @@
+apiVersion: v2
+name: proc-lens
+description: A Helm chart for deploying proc-lens as a DaemonSet to profile node processes.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+

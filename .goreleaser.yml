@@ -1,0 +1,176 @@
+# Production-grade GoReleaser configuration for proc-lens
+# This file is part of the CI/release pipeline only.
+# It enables reliable, signed, multi-platform releases and container images.
+version: 2
+
+project_name: proc-lens
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod download
+
+builds:
+  - id: proc-lens
+    main: ./cmd/proc-lens
+    binary: proc-lens
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -extldflags -static -X github.com/developer1622/proc-lens/pkg/cmd.Version={{.Version}}
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: default
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+      {{- if .Mips }}_{{ .Mips }}{{ end }}
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+sboms:
+  - id: archive-sbom
+    artifacts: archive
+    documents:
+      - "{{ .ArtifactName }}.sbom.json"
+
+# Docker images - goreleaser builds the correct arch binary first, then we use
+# a cross-compile friendly Dockerfile (updated with build args) + buildx.
+# This enables true multi-arch images.
+dockers:
+  - id: linux-amd64
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/proc-lens:{{ .Version }}-amd64"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/proc-lens:latest-amd64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--build-arg=TARGETOS=linux"
+      - "--build-arg=TARGETARCH=amd64"
+      - "--build-arg=VERSION={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+
+  - id: linux-arm64
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/proc-lens:{{ .Version }}-arm64"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/proc-lens:latest-arm64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--build-arg=TARGETOS=linux"
+      - "--build-arg=TARGETARCH=arm64"
+      - "--build-arg=VERSION={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+
+docker_manifests:
+  - name_template: ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/proc-lens:{{ .Version }}
+    image_templates:
+      - ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/proc-lens:{{ .Version }}-amd64
+      - ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/proc-lens:{{ .Version }}-arm64
+  - name_template: ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/proc-lens:latest
+    image_templates:
+      - ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/proc-lens:latest-amd64
+      - ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/proc-lens:latest-arm64
+
+# Sign container images with cosign (keyless via OIDC)
+# Only sign the images (not archives) to avoid command mismatch.
+signs:
+  - id: cosign-images
+    cmd: cosign
+    args:
+      - "sign"
+      - "--yes"
+      - "--recursive"
+      - "${artifact}"
+    artifacts: images
+    output: true
+
+# Optional: sign the archives/checksums (uncomment if you have cosign set up for files)
+# signs:
+#   - id: cosign-archives
+#     artifacts: checksum
+#     ...
+
+release:
+  # Let goreleaser detect owner/name from the current repo (works best in GitHub Actions)
+  draft: false
+  replace_existing_draft: true
+  mode: replace
+  header: |
+    ## proc-lens {{ .Version }}
+
+    > **Note**: This release was built with GoReleaser for production-grade, reproducible, signed artifacts.
+  footer: |
+    ## Thanks
+
+    For installation instructions, Docker usage, Kubernetes/Helm deployment, and CLI examples see the [README](https://github.com/{{ .Env.GITHUB_REPOSITORY_OWNER }}/{{ .ProjectName }}/blob/{{ .Tag }}/README.md).
+
+    Full changelog: [CHANGELOG.md](https://github.com/{{ .Env.GITHUB_REPOSITORY_OWNER }}/{{ .ProjectName }}/blob/{{ .Tag }}/CHANGELOG.md)
+
+# Snapshot (for testing the pipeline locally with `goreleaser release --snapshot --clean`)
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+  groups:
+    - title: Features
+      regexp: "^.*feat[(\\([\\w\\s]*\\))]*!?: .*"
+      order: 0
+    - title: "Bug fixes"
+      regexp: "^.*fix[(\\([\\w\\s]*\\))]*!?: .*"
+      order: 1
+    - title: Others
+      order: 999
+
+# Announce (optional - can be enabled later)
+# announce:
+#   slack:
+#     ...
+
+# For Helm chart releases the release-helm job in the workflow handles it via chart-releaser-action.
+# GoReleaser focuses on the Go binary + container images.
+

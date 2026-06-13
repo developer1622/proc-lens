@@ -1,0 +1,22 @@
+# Chart Releaser configuration (used by the release-helm job in release.yml)
+# This is pipeline configuration only — does not affect application code.
+# See: https://github.com/helm/chart-releaser
+
+owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
+git-base-url: https://api.github.com/
+git-upload-url: https://uploads.github.com/
+charts-dir: deploy
+skip-existing: true
+pages-branch: gh-pages          # Change if you host docs elsewhere
+chart-version: "{{ .Env.VERSION }}"  # Usually derived from the GoReleaser tag
+
+# Optional: push charts as OCI artifacts to GHCR as well
+# (uncomment and configure a registry if desired)
+# push: true
+# registry: ghcr.io
+# repository: "{{ .Env.GITHUB_REPOSITORY_OWNER }}/helm-charts"
+# package-path: .cr-release-packages
+
+# You can also set:
+# release-name-template: "helm-chart-{{ .Name }}-{{ .Version }}"
+# prerelease: false

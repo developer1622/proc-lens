@@ -1,0 +1,24 @@
+# Go binaries and executables
+/proc-lens
+/proc-lens.exe
+/proc-lens-mac-intel
+/proc-lens-mac-silicon
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Test artifacts and logs
+*.log
+*.test
+*.out
+/scratch/
+
+# IDE and editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
