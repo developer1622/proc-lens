@@ -23,10 +23,10 @@ jobs:
         go-version: ['1.24']
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
 
       - name: Setup Go
-        uses: actions/setup-go@f111f3307d8850f5010000e31836c8413dbca978 # v5.3.0
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
           cache: true
@@ -39,7 +39,7 @@ jobs:
 
       - name: Upload coverage (optional)
         if: matrix.go-version == '1.24'
-        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e68ceed900238 # v4.6.0
+        uses: codecov/codecov-action@v4
         with:
           files: ./coverage.out
           fail_ci_if_error: false
@@ -53,7 +53,7 @@ jobs:
           GOOS=windows GOARCH=amd64 go build -o /dev/null ./cmd/proc-lens
 
       - name: Run GoReleaser check (validate pipeline config)
-        uses: goreleaser/goreleaser-action@90a319d084ebc77d941d3e813f6681d4b68e0d4c # v6.1.0
+        uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
           args: check
@@ -65,16 +65,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
 
       - name: Setup Go
-        uses: actions/setup-go@f111f3307d8850f5010000e31836c8413dbca978 # v5.3.0
+        uses: actions/setup-go@v5
         with:
           go-version: '1.24'
           cache: true
 
       - name: golangci-lint (optional - falls back gracefully if no config)
-        uses: golangci/golangci-lint-action@971e284b6050e8a5549007f30d30ec0c8c227f67 # v6.1.1
+        uses: golangci/golangci-lint-action@v6
         with:
           version: latest
           args: --timeout=5m

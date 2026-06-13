@@ -30,37 +30,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0   # Important for GoReleaser changelog + version
 
       - name: Set up Go
-        uses: actions/setup-go@f111f3307d8850f5010000e31836c8413dbca978 # v5.3.0
+        uses: actions/setup-go@v5
         with:
           go-version: '1.24'
           cache: true
 
       - name: Set up QEMU (for multi-arch Docker builds)
-        uses: docker/setup-qemu-action@f95c887834b5a2b22ec643f2757a153259bef88f # v3.0.0
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@c304028f5780d52672f208346610a6f0907d27e2 # v3.8.0
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
-        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install cosign (for image signing)
-        uses: sigstore/cosign-installer@d2bf0aa01e23351ec85b40cf39366e6b41d2f782 # v3.8.1
+        uses: sigstore/cosign-installer@v3
 
       - name: Install syft (required by GoReleaser for SBOM generation)
-        uses: anchore/sbom-action/download-syft@df80a981bc184349472397e6c0a14abbc83e2096 # v0.17.9
+        uses: anchore/sbom-action/download-syft@v0
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@90a319d084ebc77d941d3e813f6681d4b68e0d4c # v6.1.0
+        uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
           args: release --clean
@@ -78,7 +78,7 @@ jobs:
     needs: goreleaser
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -88,7 +88,7 @@ jobs:
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
       - name: Install Helm
-        uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797db217cc70f188ab # v4.2.0
+        uses: azure/setup-helm@v4
         with:
           version: v3.17.0
 
@@ -98,7 +98,7 @@ jobs:
           helm repo update || true
 
       - name: Run chart-releaser
-        uses: helm/chart-releaser-action@a3454e4ae9b37c688d00289e6024be51421c1722 # v1.6.0
+        uses: helm/chart-releaser-action@v1
         with:
           charts_dir: deploy
           config_path: .github/cr.yaml   # Optional extra config

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Go binaries and executables
 /proc-lens
 /proc-lens.exe
@@ -22,3 +23,37 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+=======
+# If you prefer the allow list template instead of the deny list, see community template:
+# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
+#
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Code coverage profiles and other test artifacts
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# env file
+.env
+
+# Editor/IDE
+# .idea/
+# .vscode/
+>>>>>>> 7f177586a6197cd545ce179a366c3cc41a581813
