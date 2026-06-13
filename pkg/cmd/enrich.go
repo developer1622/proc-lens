@@ -276,48 +276,71 @@ Generate an SRE report containing:
 		strings.Join(processDetails, "\n\n"),
 	)
 
-	// 4. Query the LLM API with a simple loading spinner
-	fmt.Printf("Kindly wait, querying %s (%s) for SRE analysis... ", provider, modelWithDefault(provider, opts.Model))
-	done := make(chan bool)
+	// 4. Query the LLM API with a simple loading spinner.
+	// IMPORTANT: we create a *dedicated* LLM context with a generous timeout that is
+	// independent of the signal-cancellation context. This prevents the parent ctx being
+	// cancelled by Ctrl+C (or the profiling phase completing) from aborting the in-flight
+	// LLM HTTP request mid-stream.
+	llmCtx, llmCancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer llmCancel()
+
+	selectedModel := modelWithDefault(provider, opts.Model)
+	fmt.Printf("Querying %s%s%s (%s%s%s) for SRE analysis — this may take up to 2 minutes...\n",
+		Bold+GoogleBlue, provider, Reset, Bold, selectedModel, Reset)
+
+	done := make(chan struct{})
 	go func() {
-		chars := []string{"|", "/", "-", "\\"}
+		chars := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 		i := 0
 		for {
 			select {
 			case <-done:
 				return
 			default:
-				fmt.Printf("\rKindly wait, querying %s (%s) for SRE analysis... %s", provider, modelWithDefault(provider, opts.Model), chars[i])
+				fmt.Printf("\r  %s%s%s Thinking...", GoogleAmber, chars[i], Reset)
 				i = (i + 1) % len(chars)
-				time.Sleep(150 * time.Millisecond)
+				time.Sleep(80 * time.Millisecond)
 			}
 		}
 	}()
 
-	response, err := callLLMAPI(ctx, provider, apiKey, modelWithDefault(provider, opts.Model), endpoint, systemPrompt, userPrompt)
-	done <- true
-	fmt.Print("\r") // Clear spinner line
+	response, err := callLLMAPI(llmCtx, provider, apiKey, selectedModel, endpoint, systemPrompt, userPrompt)
+	close(done)
+	fmt.Print("\r                              \r") // clear spinner line
 
 	if err != nil {
-		fmt.Printf("%sError calling LLM API: %v. check credentials/network connection.%s\n", Red, err, Reset)
+		fmt.Printf("\n%s✗ LLM API error:%s %v\n", GoogleRed, Reset, err)
+		fmt.Printf("%sTroubleshooting:%s\n", Bold, Reset)
+		fmt.Printf("  • Verify your API key: %secho $GEMINI_API_KEY%s\n", Dim, Reset)
+		fmt.Printf("  • Test connectivity:   %scurl -s -o /dev/null -w \"%%{http_code}\" https://generativelanguage.googleapis.com%s\n", Dim, Reset)
+		fmt.Printf("  • Override the model:  %s--model gemini-flash-latest%s\n", Dim, Reset)
 		return err
 	}
 
-	// 5. Print the rich markdown response
+	// 5. Print the enriched SRE analysis
+	fmt.Println()
+	fmt.Printf("%s%s╔══════════════════════════════════════════════════════════════════════════════╗%s\n", Bold, GoogleBlue, Reset)
+	fmt.Printf("%s%s║    PROCLENS — LLM-ENRICHED SRE ANALYSIS                                     ║%s\n", Bold, GoogleBlue, Reset)
+	fmt.Printf("%s%s╚══════════════════════════════════════════════════════════════════════════════╝%s\n", Bold, GoogleBlue, Reset)
 	fmt.Println()
 	fmt.Println(response)
 	return nil
 }
 
 func init() {
-	enrichCmd.Flags().StringVar(&enrichOpts.Provider, "provider", "gemini", "LLM API provider (gemini, openai, grok, claude)")
-	enrichCmd.Flags().StringVar(&enrichOpts.Model, "model", "", "Model name (defaults: gemini-2.5-flash, gpt-4o-mini, grok-2, claude-3-5-sonnet)")
-	enrichCmd.Flags().StringVar(&enrichOpts.Endpoint, "endpoint", "", "Custom HTTP URL (e.g. http://localhost:11434/v1/chat/completions for Ollama)")
-	enrichCmd.Flags().StringVarP(&enrichOpts.File, "file", "f", "", "Load process JSON payload from file instead of running live profiling")
+	enrichCmd.Flags().StringVar(&enrichOpts.Provider, "provider", "gemini", "LLM API provider: gemini, openai, grok, claude, or custom endpoint")
+	enrichCmd.Flags().StringVar(&enrichOpts.Model, "model", "",
+		"Model name override. Defaults per provider:\n"+
+		"  gemini → gemini-flash-latest (Gemini 2.5 Flash)\n"+
+		"  openai → gpt-4o-mini\n"+
+		"  grok   → grok-2\n"+
+		"  claude → claude-3-5-sonnet-20241022")
+	enrichCmd.Flags().StringVar(&enrichOpts.Endpoint, "endpoint", "", "Custom HTTP endpoint (e.g. http://localhost:11434/v1/chat/completions for Ollama)")
+	enrichCmd.Flags().StringVar(&enrichOpts.File, "file", "", "Load process JSON payload from file instead of running live profiling")
 	enrichCmd.Flags().IntVarP(&enrichOpts.Pid, "pid", "p", 0, "Limit enrichment analysis to a specific process PID")
 	enrichCmd.Flags().IntVar(&enrichOpts.TopCount, "top", 5, "Limit analysis to the top N resource consumers")
-	enrichCmd.Flags().DurationVarP(&enrichOpts.Duration, "duration", "d", 1*time.Second, "Profiling window duration for live scan (e.g. 1s, 2s)")
-	enrichCmd.Flags().BoolVar(&enrichOpts.AllowRemote, "allow-remote-llm", false, "Explicitly allow sending node process intelligence telemetry to external LLM APIs (WARNING: security risk)")
+	enrichCmd.Flags().DurationVarP(&enrichOpts.Duration, "duration", "d", 2*time.Second, "Profiling window duration for live scan (e.g. 1s, 2s, 5s)")
+	enrichCmd.Flags().BoolVar(&enrichOpts.AllowRemote, "allow-remote-llm", false, "Allow sending process telemetry to external LLM APIs (security risk — explicit consent required)")
 
 	RootCmd.AddCommand(enrichCmd)
 }
@@ -345,7 +368,10 @@ func modelWithDefault(provider, userModel string) string {
 	}
 	switch provider {
 	case "gemini":
-		return "gemini-2.5-flash"
+		// gemini-flash-latest always resolves to the newest stable Flash model.
+		// As of 2025, this is gemini-3.5-flash (aka Gemini 2.5 Flash GA).
+		// Using the alias avoids hardcoding a version that Google may retire.
+		return "gemini-flash-latest"
 	case "openai":
 		return "gpt-4o-mini"
 	case "grok":
@@ -484,12 +510,31 @@ func callLLMAPI(ctx context.Context, provider, apiKey, model, endpoint, systemPr
 	}
 }
 
+// callGemini calls the Google Gemini REST API using the v1beta generateContent endpoint.
+//
+// Key design decisions:
+//   - API key is passed via the X-goog-api-key header (not the ?key= query param) to avoid
+//     the key appearing in server access logs and proxy caches.
+//   - The http.Client has NO internal Timeout so that the caller-provided context (which must
+//     carry its own deadline) controls cancellation. This prevents a race between the HTTP
+//     client's timer and the context deadline.
+//   - systemInstruction is passed as a top-level field (Gemini v1beta API format).
+//   - We parse the full error body on non-200 responses so the caller sees the API's reason.
 func callGemini(ctx context.Context, apiKey, model, userPrompt, systemPrompt string) (string, error) {
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
+	if apiKey == "" {
+		return "", fmt.Errorf("GEMINI_API_KEY is not set — export GEMINI_API_KEY=<your-key> and retry")
+	}
+
+	// Build the endpoint URL — no API key in the URL.
+	endpointURL := fmt.Sprintf(
+		"https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent",
+		model,
+	)
 
 	reqPayload := map[string]interface{}{
 		"contents": []map[string]interface{}{
 			{
+				"role": "user",
 				"parts": []map[string]interface{}{
 					{"text": userPrompt},
 				},
@@ -500,27 +545,45 @@ func callGemini(ctx context.Context, apiKey, model, userPrompt, systemPrompt str
 				{"text": systemPrompt},
 			},
 		},
+		"generationConfig": map[string]interface{}{
+			"maxOutputTokens": 8192,
+			"temperature":     0.2, // Low temperature = more deterministic SRE advice
+		},
 	}
 
-	bz, _ := json.Marshal(reqPayload)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bz))
+	bz, err := json.Marshal(reqPayload)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to marshal Gemini request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpointURL, bytes.NewReader(bz))
+	if err != nil {
+		return "", fmt.Errorf("failed to build Gemini HTTP request: %w", err)
+	}
+
+	// Use header-based auth — avoids key exposure in logs/proxies.
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-goog-api-key", apiKey)
+
+	// No Timeout on the client — the context carries the deadline.
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("Gemini API HTTP error: %w", err)
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API request failed (status %d): %s", resp.StatusCode, string(respBody))
+	respBody, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return "", fmt.Errorf("failed to read Gemini API response body: %w", readErr)
 	}
 
+	if resp.StatusCode != http.StatusOK {
+		// Surface the API's own error message (e.g. model not found, quota exceeded).
+		return "", fmt.Errorf("Gemini API returned HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	// Parse the response — Candidates[0].Content.Parts[0].Text holds the generated text.
 	var res struct {
 		Candidates []struct {
 			Content struct {
@@ -528,18 +591,30 @@ func callGemini(ctx context.Context, apiKey, model, userPrompt, systemPrompt str
 					Text string `json:"text"`
 				} `json:"parts"`
 			} `json:"content"`
+			FinishReason string `json:"finishReason"`
 		} `json:"candidates"`
+		ModelVersion string `json:"modelVersion"`
 	}
 
 	if err := json.Unmarshal(respBody, &res); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to parse Gemini API response: %w — raw: %s", err, string(respBody))
 	}
 
-	if len(res.Candidates) > 0 && len(res.Candidates[0].Content.Parts) > 0 {
-		return res.Candidates[0].Content.Parts[0].Text, nil
+	if len(res.Candidates) == 0 {
+		return "", fmt.Errorf("Gemini API returned no candidates — raw response: %s", string(respBody))
 	}
 
-	return "", fmt.Errorf("empty response received from Gemini API: %s", string(respBody))
+	candidate := res.Candidates[0]
+	if len(candidate.Content.Parts) == 0 {
+		return "", fmt.Errorf("Gemini candidate has no content parts (finishReason=%s)", candidate.FinishReason)
+	}
+
+	// Log which model version actually responded (useful for debugging alias resolution).
+	if res.ModelVersion != "" {
+		slog.Info("Gemini API responded", "model_alias", model, "resolved_version", res.ModelVersion, "finish_reason", candidate.FinishReason)
+	}
+
+	return candidate.Content.Parts[0].Text, nil
 }
 
 func callOpenAICompatible(ctx context.Context, apiKey, model, endpoint, userPrompt, systemPrompt string) (string, error) {

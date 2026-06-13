@@ -131,7 +131,9 @@ func RedactCmdline(cmdline string, exposeCmdline bool) string {
 	return fields[0] + " [REDACTED]"
 }
 
-// Helper formatting colors
+// ─── ANSI colour palette ─────────────────────────────────────────────────────
+//
+// Standard 4-bit codes (always supported, used for errors / warnings).
 const (
 	Reset  = "\033[0m"
 	Red    = "\033[31m"
@@ -143,6 +145,39 @@ const (
 	White  = "\033[37m"
 	Bold   = "\033[1m"
 	Dim    = "\033[2m"
+
+	// Bright / high-intensity variants
+	BrightRed    = "\033[91m"
+	BrightGreen  = "\033[92m"
+	BrightYellow = "\033[93m"
+	BrightBlue   = "\033[94m"
+	BrightPurple = "\033[95m"
+	BrightCyan   = "\033[96m"
+	BrightWhite  = "\033[97m"
+
+	// Italic / underline
+	Italic    = "\033[3m"
+	Underline = "\033[4m"
+
+	// 256-colour foreground helpers  (\033[38;5;<n>m)
+	// Google Material palette — used for the score-bar rows in the analyze report.
+	GoogleBlue   = "\033[38;5;33m"  // #4285F4  primary brand blue
+	GoogleGreen  = "\033[38;5;40m"  // #34A853  success / data stores
+	GoogleYellow = "\033[38;5;220m" // #FBBC05  warning / mid tier
+	GoogleRed    = "\033[38;5;196m" // #EA4335  critical / AI / high CPU
+	GoogleOrange = "\033[38;5;208m" // #FF6D00  event streaming / batch
+	GoogleTeal   = "\033[38;5;37m"  // #00897B  messaging / service mesh
+	GoogleIndigo = "\033[38;5;63m"  // #3949AB  orchestration / infra
+	GooglePink   = "\033[38;5;205m" // #E91E63  AI inference / ML
+	GoogleGray   = "\033[38;5;245m" // #9E9E9E  shell / utility / unknown
+	GoogleAmber  = "\033[38;5;214m" // #FF8F00  monitoring / observability
+
+	// Bar fill / empty block colours (background accents via 256-colour)
+	BarFillHigh   = "\033[38;5;46m"  // Bright lime-green  ≥ 70 %
+	BarFillMid    = "\033[38;5;220m" // Amber-yellow        40–69 %
+	BarFillLow    = "\033[38;5;202m" // Deep orange         20–39 %
+	BarFillNone   = "\033[38;5;240m" // Dark grey           < 20 %
+	BarEmpty      = "\033[38;5;237m" // Very dark grey for empty blocks
 )
 
 // PrintJSONError prints an error in a structured JSON schema.

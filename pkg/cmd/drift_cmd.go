@@ -283,7 +283,7 @@ func parseFingerprintsFromState(path string) ([]fingerprintWithTime, error) {
 }
 
 func init() {
-	driftCmd.Flags().StringVarP(&driftOpts.FilePath, "file", "f", "", "Path to the scan JSONL log file containing fingerprints or predictions")
+	driftCmd.Flags().StringVar(&driftOpts.FilePath, "file", "", "Path to the scan JSONL log file containing fingerprints or predictions")
 	driftCmd.Flags().StringVar(&driftOpts.StatePath, "state-file", "", "Path to the stability state JSON file")
 
 	RootCmd.AddCommand(driftCmd)

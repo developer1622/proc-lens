@@ -519,22 +519,7 @@ func RunScan(ctx context.Context, opts *ScanOptions) error {
 					confPct := p.Confidence * 100.0
 
 					var catColor string
-					switch p.PrimaryCategory {
-					case classifier.RelationalDB, classifier.NoSQLDB, classifier.ColumnarDB, classifier.VectorDB:
-						catColor = Blue
-					case classifier.CacheStore:
-						catColor = Purple
-					case classifier.WebServer, classifier.LoadBalancer:
-						catColor = Green
-					case classifier.AITraining, classifier.AIInference:
-						catColor = Red
-					case classifier.UtilityBatch:
-						catColor = Yellow
-					case classifier.InteractiveShell:
-						catColor = Cyan
-					default:
-						catColor = White
-					}
+					catColor = categoryColor(p.PrimaryCategory)
 
 					dispName := p.Name
 					if len(dispName) > 18 {

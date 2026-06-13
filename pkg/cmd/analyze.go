@@ -138,53 +138,54 @@ func printPredictionReport(pred classifier.Prediction) {
 	writeKbSec := pred.Telemetry.IoWriteSpeed / 1024.0
 
 	fmt.Println()
-	fmt.Printf("%s%s================================================================================%s\n", Bold, Cyan, Reset)
-	fmt.Printf("%s%s         PROCESS OBSERVABILITY & OPTIMIZATION REPORT                             %s\n", Bold, Cyan, Reset)
-	fmt.Printf("%s%s================================================================================%s\n", Bold, Cyan, Reset)
-	
-	fmt.Printf("%s[Process Info]%s\n", Bold, Reset)
-	fmt.Printf("  PID:      %s%d%s\n", Cyan, pred.PID, Reset)
-	fmt.Printf("  Name:     %s%s%s\n", Bold, pred.Name, Reset)
-	fmt.Printf("  Cmdline:  %s%s%s\n", Dim, pred.Cmdline, Reset)
+	fmt.Printf("%s%s╔══════════════════════════════════════════════════════════════════════════════╗%s\n", Bold, GoogleBlue, Reset)
+	fmt.Printf("%s%s║       PROCLENS — PROCESS OBSERVABILITY & OPTIMIZATION REPORT                ║%s\n", Bold, GoogleBlue, Reset)
+	fmt.Printf("%s%s╚══════════════════════════════════════════════════════════════════════════════╝%s\n", Bold, GoogleBlue, Reset)
+
+	fmt.Println()
+	fmt.Printf("%s%s● Process Identity%s\n", Bold, BrightCyan, Reset)
+	fmt.Printf("  %sPID%s       %s%d%s\n", Dim, Reset, BrightWhite+Bold, pred.PID, Reset)
+	fmt.Printf("  %sName%s      %s%s%s\n", Dim, Reset, Bold, pred.Name, Reset)
+	fmt.Printf("  %sCmdline%s   %s%s%s\n", Dim, Reset, GoogleGray, pred.Cmdline, Reset)
 	fmt.Println()
 
-	fmt.Printf("%s[Resource Telemetry Profile]%s\n", Bold, Reset)
-	fmt.Printf("  %-25s %s%-15.2f %-10s%s\n", "CPU Usage:", Cyan, pred.Telemetry.CpuUsage, "% (Cores saturated: "+fmt.Sprintf("%.2f", pred.Telemetry.CpuUsage/100.0)+")", Reset)
-	fmt.Printf("  %-25s %s%-15.1f %-10s%s\n", "Resident Mem (RSS):", Cyan, memMb, "MB", Reset)
-	fmt.Printf("  %-25s %s%-15.1f %-10s%s\n", "Virtual Memory (VM):", Cyan, virtMb, "MB", Reset)
-	fmt.Printf("  %-25s %s%-15d %-10s%s\n", "OS Threads Count:", Cyan, pred.Telemetry.Threads, "threads", Reset)
-	fmt.Printf("  %-25s %s%-15d %-10s%s\n", "Open File Descriptors:", Cyan, pred.Telemetry.FdCount, "FDs/Handles", Reset)
-	fmt.Printf("  %-25s %s%-15d %-10s%s\n", "Network Sockets Count:", Cyan, pred.Telemetry.SocketCount, "sockets", Reset)
-	fmt.Printf("  %-25s %s%-15.1f %-10s%s\n", "Disk Read Speed:", Cyan, readKbSec, "KB/sec", Reset)
-	fmt.Printf("  %-25s %s%-15.1f %-10s%s\n", "Disk Write Speed:", Cyan, writeKbSec, "KB/sec", Reset)
-	fmt.Printf("  %-25s %s%-15.1f %-10s%s\n", "Context Switches Rate:", Cyan, pred.Telemetry.CtxSwitchRate, "/sec", Reset)
+	fmt.Printf("%s%s● Resource Telemetry Snapshot%s\n", Bold, BrightCyan, Reset)
+	cpuColor := pickRangeColor(pred.Telemetry.CpuUsage, 5, 50, 150)
+	memColor := pickRangeColor(memMb, 100, 2048, 8192)
+	fmt.Printf("  %-26s %s%-12.2f%s  %s%% (≈%.2f cores)%s\n",
+		"CPU Usage:", cpuColor+Bold, pred.Telemetry.CpuUsage, Reset, Dim, pred.Telemetry.CpuUsage/100.0, Reset)
+	fmt.Printf("  %-26s %s%-12.1f%s  %sMB%s\n",
+		"Resident Mem (RSS):", memColor+Bold, memMb, Reset, Dim, Reset)
+	fmt.Printf("  %-26s %s%-12.1f%s  %sMB%s\n",
+		"Virtual Memory (VM):", GoogleGray, virtMb, Reset, Dim, Reset)
+	fmt.Printf("  %-26s %s%-12d%s  %sthreads%s\n",
+		"OS Threads:", BrightWhite, pred.Telemetry.Threads, Reset, Dim, Reset)
+	fmt.Printf("  %-26s %s%-12d%s  %sFDs%s\n",
+		"Open File Descriptors:", BrightWhite, pred.Telemetry.FdCount, Reset, Dim, Reset)
+	sockColor := pickRangeColor(float64(pred.Telemetry.SocketCount), 50, 300, 700)
+	fmt.Printf("  %-26s %s%-12d%s  %ssockets%s\n",
+		"Network Sockets:", sockColor+Bold, pred.Telemetry.SocketCount, Reset, Dim, Reset)
+	fmt.Printf("  %-26s %s%-12.1f%s  %sKB/s%s\n",
+		"Disk Read:", BrightGreen, readKbSec, Reset, Dim, Reset)
+	fmt.Printf("  %-26s %s%-12.1f%s  %sKB/s%s\n",
+		"Disk Write:", GoogleOrange, writeKbSec, Reset, Dim, Reset)
+	fmt.Printf("  %-26s %s%-12.1f%s  %s/sec%s\n",
+		"Context Switch Rate:", GoogleTeal, pred.Telemetry.CtxSwitchRate, Reset, Dim, Reset)
 	fmt.Println()
 
-	fmt.Printf("%s[Workload Classification Predictor]%s\n", Bold, Reset)
-	
-	var catColor string
-	switch pred.PrimaryCategory {
-	case classifier.RelationalDB, classifier.NoSQLDB, classifier.ColumnarDB, classifier.VectorDB:
-		catColor = Blue
-	case classifier.CacheStore:
-		catColor = Purple
-	case classifier.WebServer, classifier.LoadBalancer:
-		catColor = Green
-	case classifier.AITraining, classifier.AIInference:
-		catColor = Red
-	case classifier.UtilityBatch:
-		catColor = Yellow
-	case classifier.InteractiveShell:
-		catColor = Cyan
-	default:
-		catColor = White
-	}
-
-	fmt.Printf("  Primary Prediction: %s%s%s\n", Bold+catColor, pred.PrimaryCategory, Reset)
-	fmt.Printf("  Prediction Confidence: %s%.1f%%%s\n", Bold, pred.Confidence*100.0, Reset)
+	// ── Primary prediction badge ─────────────────────────────────────────────
+	catColor := categoryColor(pred.PrimaryCategory)
+	badge := fmt.Sprintf("  %s%s%s %-22s %s", Bold+catColor, "\033[7m", " ", pred.PrimaryCategory+" ", "\033[27m"+Reset)
+	confBar := buildConfBar(pred.Confidence)
+	fmt.Printf("%s%s● Workload Classification%s\n", Bold, BrightCyan, Reset)
+	fmt.Printf("%s  Confidence  %s%s%.1f%%%s\n", badge, Reset+Bold+catColor, confBar+" ", pred.Confidence*100.0, Reset)
 	fmt.Println()
-	fmt.Println("  Archetype Match Profile (Similarity Coefficients):")
-	
+
+	// ── Score bars ────────────────────────────────────────────────────────────
+	fmt.Printf("%s%s● Archetype Match Profile%s  %s(cosine similarity — top 8 of %d)%s\n",
+		Bold, BrightCyan, Reset, Dim, len(pred.Scores), Reset)
+	fmt.Println()
+
 	type scoreEntry struct {
 		Cat   classifier.Category
 		Score float64
@@ -197,36 +198,162 @@ func printPredictionReport(pred classifier.Prediction) {
 		return sortedScores[i].Score > sortedScores[j].Score
 	})
 
-	// Print top 8 categories to avoid spamming the terminal with all 16
+	const barWidth = 30
 	for idx, entry := range sortedScores {
 		if idx >= 8 {
 			break
 		}
-		barWidth := int(math.Round(entry.Score * 20))
-		if barWidth < 0 {
-			barWidth = 0
+		filled := int(math.Round(entry.Score * float64(barWidth)))
+		if filled < 0 {
+			filled = 0
 		}
-		bar := strings.Repeat("█", barWidth) + strings.Repeat("░", 20-barWidth)
-		fmt.Printf("    %-18s [%s] %5.1f%%\n", entry.Cat, bar, entry.Score*100.0)
+		if filled > barWidth {
+			filled = barWidth
+		}
+		empty := barWidth - filled
+
+		var fillColor string
+		switch {
+		case entry.Score >= 0.70:
+			fillColor = BarFillHigh
+		case entry.Score >= 0.40:
+			fillColor = BarFillMid
+		case entry.Score >= 0.20:
+			fillColor = BarFillLow
+		default:
+			fillColor = BarFillNone
+		}
+
+		rowColor := categoryColor(entry.Cat)
+		marker := "   "
+		if idx == 0 {
+			marker = " ▶ "
+		}
+
+		filledStr := fillColor + strings.Repeat("█", filled) + Reset
+		emptyStr := BarEmpty + strings.Repeat("░", empty) + Reset
+
+		pct := entry.Score * 100.0
+		var pctColor string
+		switch {
+		case pct >= 70:
+			pctColor = BarFillHigh + Bold
+		case pct >= 40:
+			pctColor = BarFillMid + Bold
+		case pct >= 20:
+			pctColor = BarFillLow
+		default:
+			pctColor = GoogleGray
+		}
+
+		fmt.Printf("%s%s%s%-24s%s [%s%s] %s%5.1f%%%s\n",
+			marker,
+			rowColor+Bold, "", entry.Cat, Reset,
+			filledStr, emptyStr,
+			pctColor, pct, Reset,
+		)
 	}
 	fmt.Println()
 
+	// ── Heuristics ────────────────────────────────────────────────────────────
 	if len(pred.RulesTriggered) > 0 {
-		fmt.Printf("%s[Heuristics & Fingerprints Triggered]%s\n", Bold, Reset)
+		fmt.Printf("%s%s● Heuristics & Fingerprints Triggered%s\n", Bold, GoogleAmber, Reset)
 		for _, rule := range pred.RulesTriggered {
-			fmt.Printf("  • %s\n", rule)
+			fmt.Printf("  %s⚡%s %s\n", GoogleAmber, Reset, rule)
 		}
 		fmt.Println()
 	}
 
-	fmt.Printf("%s%s[Autonomous Optimization Engine Recommendations]%s\n", Bold, Green, Reset)
+	// ── Recommendations ───────────────────────────────────────────────────────
+	fmt.Printf("%s%s● Autonomous Optimization Engine%s\n", Bold, GoogleGreen, Reset)
 	if len(pred.Recommendations) == 0 {
-		fmt.Println("  • Workload resource consumption is stable. No tuning recommendations are required at this time.")
+		fmt.Printf("  %s✓%s Workload resource consumption is stable. No tuning recommendations required.\n", GoogleGreen, Reset)
 	} else {
 		for _, rec := range pred.Recommendations {
-			fmt.Printf("  • %s\n", rec)
+			fmt.Printf("  %s→%s %s\n", BrightGreen, Reset, rec)
 		}
 	}
 	fmt.Println()
 }
 
+// buildConfBar renders a compact 10-cell confidence bar coloured by level.
+func buildConfBar(conf float64) string {
+	const w = 10
+	filled := int(math.Round(conf * float64(w)))
+	if filled < 0 {
+		filled = 0
+	}
+	if filled > w {
+		filled = w
+	}
+	var fillColor string
+	switch {
+	case conf >= 0.70:
+		fillColor = BarFillHigh
+	case conf >= 0.40:
+		fillColor = BarFillMid
+	default:
+		fillColor = BarFillLow
+	}
+	return fillColor + strings.Repeat("█", filled) + Reset +
+		BarEmpty + strings.Repeat("░", w-filled) + Reset
+}
+
+// pickRangeColor returns a colour code scaled across low/mid/high thresholds.
+func pickRangeColor(val, low, mid, high float64) string {
+	switch {
+	case val >= high:
+		return GoogleRed
+	case val >= mid:
+		return GoogleYellow
+	case val >= low:
+		return BrightGreen
+	default:
+		return GoogleGray
+	}
+}
+
+// categoryColor returns the Google-palette 256-colour code for a given archetype tier.
+func categoryColor(cat classifier.Category) string {
+	switch cat {
+	// Network / Ingress — Google Blue
+	case classifier.LoadBalancer, classifier.APIGateway, classifier.ServiceMesh, classifier.CDNEdgeNode:
+		return GoogleBlue
+	// Application — Bright Cyan
+	case classifier.WebServer, classifier.Microservice, classifier.ServerlessWorker,
+		classifier.JobWorker, classifier.SchedulerDaemon:
+		return BrightCyan
+	// Data stores — Google Green
+	case classifier.RelationalDB, classifier.NoSQLDB, classifier.ColumnarDB,
+		classifier.VectorDB, classifier.TimeSeriesDB, classifier.GraphDB, classifier.ObjectStore:
+		return GoogleGreen
+	// Cache — Bright Purple
+	case classifier.CacheStore:
+		return BrightPurple
+	// Messaging / Streaming — Google Orange
+	case classifier.MessageBroker, classifier.EventStreaming, classifier.StreamProcessor:
+		return GoogleOrange
+	// Search / Analytics — Google Yellow
+	case classifier.SearchEngine, classifier.OLAPEngine:
+		return GoogleYellow
+	// AI Training — Google Red
+	case classifier.AITraining:
+		return GoogleRed
+	// AI Inference / ML — Google Pink
+	case classifier.AIInference, classifier.MLPipeline, classifier.FeatureStore:
+		return GooglePink
+	// Infrastructure — Google Indigo
+	case classifier.OrchestratorAgent, classifier.OrchestratorPod,
+		classifier.ServiceDiscovery, classifier.ConfigManager:
+		return GoogleIndigo
+	// Observability — Google Amber
+	case classifier.MonitoringAgent, classifier.LogAggregator, classifier.TracingAgent:
+		return GoogleAmber
+	// Shell / Utility / Legacy — Grey
+	case classifier.InteractiveShell, classifier.UtilityBatch,
+		classifier.LegacySOAService, classifier.CIRunner:
+		return GoogleGray
+	default:
+		return White
+	}
+}

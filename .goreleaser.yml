@@ -1,6 +1,13 @@
-# Production-grade GoReleaser configuration for proc-lens
+# Production-grade GoReleaser v2 configuration for proc-lens
 # This file is part of the CI/release pipeline only.
 # It enables reliable, signed, multi-platform releases and container images.
+#
+# Note: This file targets GoReleaser v2 (>= 2.0.0). All deprecated v1 fields have been removed:
+#   - archives.format / archives.format_overrides.format  → archives.formats (plural)
+#   - dockers / docker_manifests                          → dockers_v2 / docker_manifests_v2
+#
+# Caveat: The dockers_v2 / docker_manifests_v2 schemas were introduced in GoReleaser ~v2.3+.
+# If you pin an older v2 minor, revert to the `dockers` block but accept the deprecation warning.
 version: 2
 
 project_name: proc-lens
@@ -41,9 +48,11 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
       {{- if .Mips }}_{{ .Mips }}{{ end }}
+    # GoReleaser v2: use "formats" (plural list) instead of the deprecated "format" string
     formats: [tar.gz]
     format_overrides:
       - goos: windows
+        # GoReleaser v2: use "formats" (plural list) here as well
         formats: [zip]
     files:
       - README.md
@@ -60,12 +69,10 @@ sboms:
     documents:
       - "{{ .ArtifactName }}.sbom.json"
 
-# Docker images (using the current supported dockers + docker_manifests syntax).
-# Note: These are deprecated in favor of dockers_v2 / docker_manifests_v2.
-# We are keeping the working syntax for now until the new v2 docker schema stabilizes across our target GoReleaser versions.
-# goreleaser builds the correct arch binary first, then we use
-# a cross-compile friendly Dockerfile + buildx.
-dockers:
+# GoReleaser v2: use dockers_v2 instead of the deprecated dockers block.
+# Each entry in dockers_v2 builds one platform-specific image (no manifests here).
+# docker_manifests_v2 below stitches them into a multi-arch manifest list.
+dockers_v2:
   - id: linux-amd64
     goos: linux
     goarch: amd64
@@ -104,7 +111,8 @@ dockers:
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Version}}"
 
-docker_manifests:
+# GoReleaser v2: use docker_manifests_v2 instead of the deprecated docker_manifests block.
+docker_manifests_v2:
   - name_template: ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/proc-lens:{{ .Version }}
     image_templates:
       - ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/proc-lens:{{ .Version }}-amd64
@@ -127,12 +135,6 @@ signs:
     artifacts: images
     output: true
 
-# Optional: sign the archives/checksums (uncomment if you have cosign set up for files)
-# signs:
-#   - id: cosign-archives
-#     artifacts: checksum
-#     ...
-
 release:
   # Let goreleaser detect owner/name from the current repo (works best in GitHub Actions)
   draft: false
@@ -141,7 +143,7 @@ release:
   header: |
     ## proc-lens {{ .Version }}
 
-    > **Note**: This release was built with GoReleaser for production-grade, reproducible, signed artifacts.
+    > **Note**: This release was built with GoReleaser v2 for production-grade, reproducible, signed artifacts.
   footer: |
     ## Thanks
 
@@ -170,11 +172,5 @@ changelog:
     - title: Others
       order: 999
 
-# Announce (optional - can be enabled later)
-# announce:
-#   slack:
-#     ...
-
 # For Helm chart releases the release-helm job in the workflow handles it via chart-releaser-action.
 # GoReleaser focuses on the Go binary + container images.
-
