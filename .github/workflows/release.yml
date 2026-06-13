@@ -21,6 +21,10 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    # Manual trigger to quickly publish container images to GHCR
+    # without creating a full release tag. Perfect for testing that
+    # the container package appears in GitHub Packages > Containers.
 
 permissions:
   contents: write
@@ -32,6 +36,8 @@ jobs:
   goreleaser:
     name: Release with GoReleaser
     runs-on: ubuntu-latest
+    # Only run full release (binaries + containers via goreleaser) on version tags
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -113,8 +119,65 @@ jobs:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           CR_OWNER: ${{ github.repository_owner }}
 
+  # Manual container publish job
+  # Trigger this via "Run workflow" button in Actions to quickly build & push
+  # multi-arch images to GHCR so you can see the package under
+  # Repo > Packages > Containers (or https://github.com/owner/repo/pkgs/container/proc-lens)
+  publish-container:
+    name: Publish Container Image to GHCR (manual)
+    runs-on: ubuntu-latest
+    # Only run when manually triggered via workflow_dispatch
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU (for multi-arch)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags & labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/proc-lens
+          tags: |
+            type=sha
+            type=raw,value=manual
+            type=raw,value=latest,enable=true
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=manual-${{ github.sha }}
+
 # Production tip:
 # After a successful release you can also:
 # - Use the generated SBOMs + signed images for compliance / supply chain security
 # - The binaries + Docker images are the primary deliverables driven by GoReleaser
 # - Local development commands (`docker build`, make targets) continue to work unchanged.
+#
+# To see containers in GitHub:
+# Go to your repo → Packages (or directly: https://github.com/OWNER/REPO/pkgs/container/proc-lens)
+# The image will appear under "Containers" once pushed via this workflow or on tags.
